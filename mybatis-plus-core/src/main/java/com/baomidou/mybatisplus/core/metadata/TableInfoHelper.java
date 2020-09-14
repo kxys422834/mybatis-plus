@@ -54,11 +54,21 @@ public class TableInfoHelper {
      * 储存反射类表信息
      */
     private static final Map<Class<?>, TableInfo> TABLE_INFO_CACHE = new ConcurrentHashMap<>();
+    /**
+     * 根据表名称缓存表信息
+     */
+    private static final Map<String, TableInfo> TABLE_INFO_BY_TABLE_NAME_CACHE = new ConcurrentHashMap<>(16);
 
     /**
      * 默认表主键名称
      */
     private static final String DEFAULT_ID_NAME = "id";
+
+    private static TableInfo cacheTableInfo(Class<?> clazz, TableInfo tableInfo){
+        TABLE_INFO_CACHE.put(clazz, tableInfo);
+        TABLE_INFO_BY_TABLE_NAME_CACHE.put(tableInfo.getTableName(), tableInfo);
+        return tableInfo;
+    }
 
     /**
      * <p>
@@ -86,7 +96,7 @@ public class TableInfoHelper {
             tableInfo = TABLE_INFO_CACHE.get(ClassUtils.getUserClass(currentClass));
         }
         if (tableInfo != null) {
-            TABLE_INFO_CACHE.put(ClassUtils.getUserClass(clazz), tableInfo);
+            cacheTableInfo(ClassUtils.getUserClass(clazz), tableInfo);
         }
         return tableInfo;
     }
@@ -104,26 +114,12 @@ public class TableInfoHelper {
     }
 
     /**
-     * <p>
-     * 实体类反射获取表信息【初始化】
-     * </p>
-     *
-     * @param clazz 反射实体类
-     * @return 数据库表反射信息
+     * 根据表名称获取表信息
+     * @param tableName 表名称
+     * @return 表信息
      */
-    public synchronized static TableInfo initTableInfo(MapperBuilderAssistant builderAssistant, Class<?> clazz) {
-        TableInfo targetTableInfo = TABLE_INFO_CACHE.get(clazz);
-        final Configuration configuration = builderAssistant.getConfiguration();
-        if (targetTableInfo != null) {
-            Configuration oldConfiguration = targetTableInfo.getConfiguration();
-            if (!oldConfiguration.equals(configuration)) {
-                // 不是同一个 Configuration,进行重新初始化
-                targetTableInfo = initTableInfo(configuration, builderAssistant.getCurrentNamespace(), clazz);
-                TABLE_INFO_CACHE.put(clazz, targetTableInfo);
-            }
-            return targetTableInfo;
-        }
-        return TABLE_INFO_CACHE.computeIfAbsent(clazz, key -> initTableInfo(configuration, builderAssistant.getCurrentNamespace(), key));
+    public static TableInfo getTableInfoByTableName(String tableName) {
+        return TABLE_INFO_BY_TABLE_NAME_CACHE.get(tableName);
     }
 
     /**
@@ -134,26 +130,26 @@ public class TableInfoHelper {
      * @param clazz 反射实体类
      * @return 数据库表反射信息
      */
-    private synchronized static TableInfo initTableInfo(Configuration configuration, String currentNamespace, Class<?> clazz) {
-        /* 没有获取到缓存信息,则初始化 */
-        TableInfo tableInfo = new TableInfo(clazz);
-        tableInfo.setCurrentNamespace(currentNamespace);
-        tableInfo.setConfiguration(configuration);
+    public synchronized static TableInfo initTableInfo(MapperBuilderAssistant builderAssistant, Class<?> clazz) {
+        TableInfo targetTableInfo = TABLE_INFO_CACHE.get(clazz);
+        final Configuration configuration = builderAssistant.getConfiguration();
         GlobalConfig globalConfig = GlobalConfigUtils.getGlobalConfig(configuration);
+        TableInfoParser<? extends TableInfo> tableInfoParser = globalConfig.getTableInfoParser();
 
-        /* 初始化表名相关 */
-        final String[] excludeProperty = initTableName(clazz, globalConfig, tableInfo);
-
-        List<String> excludePropertyList = excludeProperty != null && excludeProperty.length > 0 ? Arrays.asList(excludeProperty) : Collections.emptyList();
-
-        /* 初始化字段相关 */
-        initTableFields(clazz, globalConfig, tableInfo, excludePropertyList);
-
-        /* 自动构建 resultMap */
-        tableInfo.initResultMapIfNeed();
-
-        /* 缓存 lambda */
-        LambdaUtils.installCache(tableInfo);
+        if (targetTableInfo != null) {
+            Configuration oldConfiguration = targetTableInfo.getConfiguration();
+            if (!oldConfiguration.equals(configuration)) {
+                // 不是同一个 Configuration,进行重新初始化
+                targetTableInfo = tableInfoParser.build(builderAssistant, clazz);
+                cacheTableInfo(clazz, targetTableInfo);
+            }
+            return targetTableInfo;
+        }
+        if(TABLE_INFO_CACHE.get(clazz) != null){
+            return TABLE_INFO_CACHE.get(clazz);
+        }
+        TableInfo tableInfo =  tableInfoParser.build(builderAssistant, clazz);
+        cacheTableInfo(clazz, tableInfo);
         return tableInfo;
     }
 
@@ -167,7 +163,7 @@ public class TableInfoHelper {
      * @param tableInfo    数据库表反射信息
      * @return 需要排除的字段名
      */
-    private static String[] initTableName(Class<?> clazz, GlobalConfig globalConfig, TableInfo tableInfo) {
+    protected static String[] initTableName(Class<?> clazz, GlobalConfig globalConfig, TableInfo tableInfo) {
         /* 数据库全局配置 */
         GlobalConfig.DbConfig dbConfig = globalConfig.getDbConfig();
         TableName table = clazz.getAnnotation(TableName.class);
@@ -224,7 +220,7 @@ public class TableInfoHelper {
      * @param dbConfig  DbConfig
      * @return 表名
      */
-    private static String initTableNameWithDbConfig(String className, GlobalConfig.DbConfig dbConfig) {
+    protected static String initTableNameWithDbConfig(String className, GlobalConfig.DbConfig dbConfig) {
         String tableName = className;
         // 开启表名下划线申明
         if (dbConfig.isTableUnderline()) {
@@ -343,7 +339,7 @@ public class TableInfoHelper {
      * @param tableId   注解
      * @param reflector Reflector
      */
-    private static void initTableIdWithAnnotation(GlobalConfig.DbConfig dbConfig, TableInfo tableInfo,
+    protected static void initTableIdWithAnnotation(GlobalConfig.DbConfig dbConfig, TableInfo tableInfo,
                                                   Field field, TableId tableId, Reflector reflector) {
         boolean underCamel = tableInfo.isUnderCamel();
         final String property = field.getName();
@@ -394,7 +390,7 @@ public class TableInfoHelper {
      * @param reflector Reflector
      * @return true 继续下一个属性判断，返回 continue;
      */
-    private static boolean initTableIdWithoutAnnotation(GlobalConfig.DbConfig dbConfig, TableInfo tableInfo,
+    protected static boolean initTableIdWithoutAnnotation(GlobalConfig.DbConfig dbConfig, TableInfo tableInfo,
                                                         Field field, Reflector reflector) {
         final String property = field.getName();
         if (DEFAULT_ID_NAME.equalsIgnoreCase(property)) {
