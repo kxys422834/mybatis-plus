@@ -80,7 +80,10 @@ public class InterceptorIgnoreHelper {
 
     public static boolean willIgnore(String id, Function<InterceptorIgnoreCache, Boolean> function) {
         InterceptorIgnoreCache cache = INTERCEPTOR_IGNORE_CACHE.get(id);
-        if (cache != null && !cache.ignoreAll) {
+        if (cache != null) {
+            if(cache.ignoreAll){
+                return true;
+            }
             return function.apply(cache);
         }
         return false;
@@ -88,7 +91,10 @@ public class InterceptorIgnoreHelper {
 
     public static boolean willIgnore(String id, Class<?> interceptor) {
         InterceptorIgnoreCache cache = INTERCEPTOR_IGNORE_CACHE.get(id);
-        if (cache != null&& !cache.ignoreAll) {
+        if (cache != null) {
+            if(cache.ignoreAll){
+                return true;
+            }
             return cache.ignores.contains(interceptor);
         }
         return false;
