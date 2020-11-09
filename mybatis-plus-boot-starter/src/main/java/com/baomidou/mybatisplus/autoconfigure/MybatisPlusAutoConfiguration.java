@@ -22,6 +22,7 @@ import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import com.baomidou.mybatisplus.core.incrementer.IKeyGenerator;
 import com.baomidou.mybatisplus.core.incrementer.IdentifierGenerator;
 import com.baomidou.mybatisplus.core.injector.ISqlInjector;
+import com.baomidou.mybatisplus.core.metadata.TableInfoParser;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.mapping.DatabaseIdProvider;
@@ -81,7 +82,7 @@ import java.util.stream.Stream;
  * otherwise this auto-configuration will attempt to register mappers based on
  * the interface definitions in or under the root auto-configuration package.
  * </p>
- * <p> copy from {@link org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration}</p>
+ * <p> copy from {@code org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration}</p>
  *
  * @author Eddú Meléndez
  * @author Josh Long
@@ -213,6 +214,8 @@ public class MybatisPlusAutoConfiguration implements InitializingBean {
         this.getBeanThen(ISqlInjector.class, globalConfig::setSqlInjector);
         // TODO 注入ID生成器
         this.getBeanThen(IdentifierGenerator.class, globalConfig::setIdentifierGenerator);
+        // 注入 TableInfoParser 解析器
+        this.getBeanThen(TableInfoParser.class, globalConfig::setTableInfoParser);
         // TODO 设置 GlobalConfig 到 MybatisSqlSessionFactoryBean
         factory.setGlobalConfig(globalConfig);
         return factory.getObject();
